@@ -20,11 +20,3 @@ CREATE TABLE IF NOT EXISTS processed_payments (
   amount INTEGER NOT NULL CHECK (amount > 0),
   processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
-INSERT INTO listings (domain, url, description, bid, clicks) VALUES
-  ('appgrowthkit.com', 'https://appgrowthkit.com', 'Screenshot tools for ambitious app teams.', 96, 1284),
-  ('usemotionkit.com', 'https://usemotionkit.com', 'A focused motion library for product teams.', 78, 912),
-  ('tinylaunch.dev', 'https://tinylaunch.dev', 'Launch pages made for independent builders.', 61, 740),
-  ('readme.so', 'https://readme.so', 'Turn product knowledge into clear documentation.', 42, 488),
-  ('foundercrm.com', 'https://foundercrm.com', 'A lightweight relationship manager for founders.', 27, 301)
-ON CONFLICT (domain) DO NOTHING;

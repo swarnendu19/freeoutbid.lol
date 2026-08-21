@@ -7,13 +7,6 @@ import { CSSProperties, FormEvent, KeyboardEvent, useEffect, useMemo, useState }
 type Listing = { id: number | string; domain: string; url: string; description: string; bid: number; clicks: number; free_bids_remaining: number; bid_limit: number; updated_at?: string };
 type Profile = Pick<Listing, "domain" | "url" | "bid" | "free_bids_remaining" | "bid_limit">;
 
-const fallbackListings: Listing[] = [
-  { id: 1, domain: "appgrowthkit.com", url: "https://appgrowthkit.com", description: "Screenshot tools for ambitious app teams.", bid: 96, clicks: 1284, free_bids_remaining: 0, bid_limit: 400 },
-  { id: 2, domain: "usemotionkit.com", url: "https://usemotionkit.com", description: "A focused motion library for product teams.", bid: 78, clicks: 912, free_bids_remaining: 0, bid_limit: 400 },
-  { id: 3, domain: "tinylaunch.dev", url: "https://tinylaunch.dev", description: "Launch pages made for independent builders.", bid: 61, clicks: 740, free_bids_remaining: 0, bid_limit: 400 },
-  { id: 4, domain: "readme.so", url: "https://readme.so", description: "Turn product knowledge into clear documentation.", bid: 42, clicks: 488, free_bids_remaining: 0, bid_limit: 400 },
-];
-
 function normalizeUrl(input: string) {
   try {
     const parsed = new URL(/^https?:\/\//i.test(input.trim()) ? input.trim() : `https://${input.trim()}`);
@@ -27,7 +20,8 @@ export default function Home() {
   const [amount, setAmount] = useState(1);
   const [domainInput, setDomainInput] = useState("");
   const [profile, setProfile] = useState<Profile>({ domain: "", url: "", bid: 0, free_bids_remaining: 3, bid_limit: 100 });
-  const [listings, setListings] = useState<Listing[]>(fallbackListings);
+  const [listings, setListings] = useState<Listing[]>([]);
+  const [boardLoading, setBoardLoading] = useState(true);
   const [pending, setPending] = useState<{ domain: string; url: string } | null>(null);
   const [message, setMessage] = useState("");
   const [messageTone, setMessageTone] = useState<"muted" | "error" | "success">("muted");
@@ -44,12 +38,16 @@ export default function Home() {
   const canUseFreeBid = !freeBidsGone && !overLimit;
 
   async function refresh(url?: string, syncAmount = false) {
-    const query = url ? `?url=${encodeURIComponent(url)}` : "";
-    const response = await fetch(`/api/leaderboard${query}`, { cache: "no-store" });
-    if (!response.ok) return;
-    const data = await response.json() as { listings: Listing[]; profile: Profile };
-    setListings(data.listings);
-    if (url) { setProfile(data.profile); if (syncAmount) setAmount(data.profile.bid > 0 ? data.profile.bid + 1 : 1); }
+    try {
+      const query = url ? `?url=${encodeURIComponent(url)}` : "";
+      const response = await fetch(`/api/leaderboard${query}`, { cache: "no-store" });
+      if (!response.ok) return;
+      const data = await response.json() as { listings: Listing[]; profile: Profile };
+      setListings(data.listings);
+      if (url) { setProfile(data.profile); if (syncAmount) setAmount(data.profile.bid > 0 ? data.profile.bid + 1 : 1); }
+    } finally {
+      setBoardLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -141,7 +139,7 @@ export default function Home() {
       <p className={`form-message ${messageTone}`}>{message || "Enter a URL to instantly load its bid, free bids, and current limit."}</p>
       <div className="credit-strip" aria-label="Current free bid allowance"><span><b>{freeBids}</b> free bids left</span><i /><span>Current limit <b>${bidLimit}</b></span><i /><span>{profile.bid ? <>Current bid <b>${profile.bid}</b></> : <b>New URL</b>}</span></div>
     </section>
-    <section className="leaderboard shell" id="leaderboard"><div className="board-head"><div><small>THE PUBLIC BOARD</small><h2>Highest bid. Highest rank.</h2></div><button type="button" onClick={() => void refresh(profile.url)}>↻ Refresh</button></div><p className="disclosure">Click a card to visit its site. Free and promotional bids count toward displayed totals.</p><div className="rows">{listings.map((listing, index) => <article className={`leader-row ${index === 0 ? "top" : ""} ${listing.domain === profile.domain ? "owned" : ""}`} key={listing.domain} role="link" tabIndex={0} onClick={() => openListing(listing)} onKeyDown={(event) => cardKey(event, listing)} aria-label={`Visit ${listing.domain}`}>{index === 0 && <span className="top-crown">♛ CURRENT #1</span>}<span className="rank">#{index + 1}</span><span className="avatar"><img src={`${listing.url.replace(/\/$/, "")}/favicon.ico`} alt="" onError={(event) => { event.currentTarget.hidden = true; event.currentTarget.parentElement?.classList.add("favicon-fallback"); }} /><b>{listing.domain[0].toUpperCase()}</b></span><div className="listing-copy"><h3>{listing.domain}{listing.domain === profile.domain && <em>ACTIVE URL</em>}</h3><p>{listing.description}</p><time>{listing.updated_at ? "recently updated" : "live listing"}</time></div><dl><div><dt>BID</dt><dd>${listing.bid}</dd></div><div><dt>CLICKS</dt><dd>{listing.clicks.toLocaleString()}</dd></div><div><dt>PER CLICK</dt><dd>{listing.clicks ? `$${(listing.bid / listing.clicks).toFixed(2)}` : "—"}</dd></div></dl><button className="row-action" onClick={(event) => { event.stopPropagation(); startOutbid(listing); }}>Outbid with ${listing.bid + 1} <span>↑</span></button></article>)}</div></section>
+    <section className="leaderboard shell" id="leaderboard"><div className="board-head"><div><small>THE PUBLIC BOARD</small><h2>Highest bid. Highest rank.</h2></div><button type="button" onClick={() => void refresh(profile.url)}>↻ Refresh</button></div><p className="disclosure">Click a card to visit its site. Free and promotional bids count toward displayed totals.</p><div className="rows">{boardLoading ? <div className="board-state">Loading the live leaderboard…</div> : listings.length === 0 ? <div className="board-state"><strong>No bidders yet.</strong><span>Enter your URL above and become the first.</span></div> : listings.map((listing, index) => <article className={`leader-row ${index === 0 ? "top" : ""} ${listing.domain === profile.domain ? "owned" : ""}`} key={listing.domain} role="link" tabIndex={0} onClick={() => openListing(listing)} onKeyDown={(event) => cardKey(event, listing)} aria-label={`Visit ${listing.domain}`}>{index === 0 && <span className="top-crown">♛ CURRENT #1</span>}<span className="rank">#{index + 1}</span><span className="avatar"><img src={`${listing.url.replace(/\/$/, "")}/favicon.ico`} alt="" onError={(event) => { event.currentTarget.hidden = true; event.currentTarget.parentElement?.classList.add("favicon-fallback"); }} /><b>{listing.domain[0].toUpperCase()}</b></span><div className="listing-copy"><h3>{listing.domain}{listing.domain === profile.domain && <em>ACTIVE URL</em>}</h3><p>{listing.description}</p><time>{listing.updated_at ? "recently updated" : "live listing"}</time></div><dl><div><dt>BID</dt><dd>${listing.bid}</dd></div><div><dt>CLICKS</dt><dd>{listing.clicks.toLocaleString()}</dd></div><div><dt>PER CLICK</dt><dd>{listing.clicks ? `$${(listing.bid / listing.clicks).toFixed(2)}` : "—"}</dd></div></dl><button className="row-action" onClick={(event) => { event.stopPropagation(); startOutbid(listing); }}>Outbid with ${listing.bid + 1} <span>↑</span></button></article>)}</div></section>
     <section className="rules shell" id="rules"><div><small>10-SECOND RULES</small><h2>No votes. No feed algorithm. Just the number.</h2></div><ol><li><b>01</b><span><strong>Enter a URL and amount.</strong>The URL is the listing key—there is no signup.</span></li><li><b>02</b><span><strong>Use the free allowance.</strong>Each URL gets 3 free bids, starting at a $100 limit. Every used free bid raises its next limit by $100, up to $400.</span></li><li><b>03</b><span><strong>Know when free ends.</strong>Once free bids are gone—or an amount exceeds the current limit—the exact bid continues through Polar.</span></li></ol></section>
     <footer className="footer shell"><a className="brand" href="#top"><span className="logo-mark" aria-hidden="true"><i /><i /><i /></span><span>freeoutbid<em>.lol</em></span></a><p>Rankings may include free or promotional bids.</p><span>Leaderboard · Rules</span></footer>
     {notice && <div className="toast" role="status"><span>✓</span>{notice}<button onClick={() => setNotice("")} aria-label="Dismiss">×</button></div>}
