@@ -28,4 +28,6 @@ Configure the values in `.env.local` before running migrations. Never commit rea
 4. In Polar, register `https://freeoutbid.lol/api/webhook/polar` for the `order.paid` event.
 5. Deploy with Node.js 22 and run `npm run build` followed by `npm start`.
 
+Vercel runs the idempotent database migration automatically before each production build through `vercel.json`.
+
 Paid-bid processing is idempotent: repeated Polar webhook deliveries cannot apply the same order twice.
