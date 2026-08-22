@@ -20,3 +20,15 @@ CREATE TABLE IF NOT EXISTS processed_payments (
   amount INTEGER NOT NULL CHECK (amount > 0),
   processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Emergency cleanup for the pornography and randomized-domain spam flood.
+DELETE FROM listings
+WHERE domain IN (
+  'redgifs.com',
+  'grindr.com',
+  'pornhub.com',
+  'xhamster.com',
+  'rip.website',
+  'rip.this.website'
+)
+OR domain ~ '^[0-9a-f]{16}\.rip(\.com)?$';

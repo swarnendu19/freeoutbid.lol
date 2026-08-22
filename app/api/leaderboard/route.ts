@@ -4,6 +4,19 @@ export const runtime = "nodejs";
 
 type ListingRow = { id: number; domain: string; url: string; description: string; bid: number; clicks: number; free_bids_remaining: number; bid_limit: number; updated_at: string };
 
+const blockedDomains = new Set([
+  "redgifs.com",
+  "grindr.com",
+  "pornhub.com",
+  "xhamster.com",
+  "rip.website",
+  "rip.this.website",
+]);
+
+function isBlockedDomain(domain: string) {
+  return blockedDomains.has(domain) || /^[0-9a-f]{16}\.rip(?:\.com)?$/i.test(domain);
+}
+
 function normalizeUrl(input: string) {
   try {
     const parsed = new URL(/^https?:\/\//i.test(input.trim()) ? input.trim() : `https://${input.trim()}`);
@@ -30,6 +43,9 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null) as { action?: "click"; url?: string; amount?: number } | null;
   const normalized = body?.url ? normalizeUrl(body.url) : null;
   if (!normalized) return Response.json({ error: "Enter a valid domain or product URL." }, { status: 400 });
+  if (body?.action !== "click" && isBlockedDomain(normalized.domain)) {
+    return Response.json({ error: "This domain is not permitted on the leaderboard." }, { status: 400 });
+  }
   const sql = database();
   if (body?.action === "click") {
     await sql`UPDATE listings SET clicks = clicks + 1 WHERE domain = ${normalized.domain}`;
