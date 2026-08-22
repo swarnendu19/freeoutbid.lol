@@ -149,7 +149,7 @@ export default function LeaderboardClient({ initialListings }: { initialListings
       <div className="listing-copy"><h3>{listing.title || listing.domain}{listing.is_example && <em className="featured-tag">FEATURED</em>}{!listing.is_paid && <em className="free-tag">FREE LISTING</em>}{listing.domain === profile.domain && <em>ACTIVE URL</em>}</h3><p>{listing.description}</p><time>{listing.domain} · {listing.updated_at ? "recently updated" : "live listing"}</time></div>
       <dl><div><dt>BID</dt><dd>${listing.bid}</dd></div><div><dt>CLICKS</dt><dd>{listing.clicks.toLocaleString()}</dd></div></dl>
       <button className="row-action" onClick={(event) => { event.stopPropagation(); startOutbid(listing); }}>{listing.is_paid ? `Outbid with $${nextBid}` : "Bid $1 to go paid"} <span>↑</span></button>
-      {(listing.screenshots ?? []).length > 0 && <div className="screenshot-gallery" onClick={(event) => event.stopPropagation()}>{listing.screenshots.map((screenshot, shotIndex) => <figure key={`${screenshot}-${shotIndex}`}><img src={screenshot} alt={`${listing.title || listing.domain} screenshot ${shotIndex + 1}`} loading="lazy" /></figure>)}</div>}
+      {(listing.screenshots ?? []).length > 0 && <div className="screenshot-gallery" onClick={(event) => event.stopPropagation()} role="region" aria-label={`${listing.title || listing.domain} screenshot gallery`} tabIndex={0}>{listing.screenshots.map((screenshot, shotIndex) => <figure key={`${screenshot}-${shotIndex}`}><img src={screenshot} alt={`${listing.title || listing.domain} screenshot ${shotIndex + 1}`} loading="lazy" /></figure>)}</div>}
     </article>;
   }
 
