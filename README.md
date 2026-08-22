@@ -1,6 +1,6 @@
 # freeoutbid.lol
 
-A no-signup product leaderboard where each URL starts with three free bids. Higher bids rank higher, while paid bids use Polar checkout.
+A no-signup, paid product leaderboard where higher bids rank higher and every public bid uses Polar checkout. Free listings are manually reviewed after the requester follows @SwarnCode on X.
 
 ## Stack
 

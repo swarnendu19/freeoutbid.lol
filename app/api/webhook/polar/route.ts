@@ -1,5 +1,6 @@
 import { Webhooks } from "@polar-sh/nextjs";
 import { database } from "../../../../db/client";
+import { isBlockedDomain } from "../../../../lib/domain-policy";
 
 export const runtime = "nodejs";
 
@@ -9,7 +10,7 @@ export const POST = Webhooks({
     const order = payload.data;
     const domain = typeof order.metadata.domain === "string" ? order.metadata.domain.toLowerCase() : "";
     const amount = Number(order.metadata.bid_amount_usd);
-    if (!domain.includes(".") || !Number.isInteger(amount) || amount < 1 || amount > 10000) return;
+    if (!domain.includes(".") || isBlockedDomain(domain) || !Number.isInteger(amount) || amount < 1 || amount > 10000) return;
     const sql = database();
     await sql.begin(async (tx) => {
       const inserted = await tx<{ order_id: string }[]>`

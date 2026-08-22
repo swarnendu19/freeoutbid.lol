@@ -1,3 +1,5 @@
+import { isBlockedDomain } from "../../../lib/domain-policy";
+
 type CheckoutRequest = { domain?: unknown; amount?: unknown };
 
 export const runtime = "nodejs";
@@ -13,6 +15,7 @@ export async function POST(request: Request) {
   const domain = typeof body.domain === "string" ? body.domain.trim().toLowerCase() : "";
   const amount = typeof body.amount === "number" ? body.amount : Number(body.amount);
   if (!domain || !domain.includes(".") || !Number.isFinite(amount) || amount < 1 || amount > 10000) return Response.json({ error: "Provide a valid domain and bid between $1 and $10,000." }, { status: 400 });
+  if (isBlockedDomain(domain)) return Response.json({ error: "This domain is not permitted on the leaderboard." }, { status: 400 });
 
   const polarResponse = await fetch(`${apiBase}/v1/checkouts/`, {
     method: "POST",

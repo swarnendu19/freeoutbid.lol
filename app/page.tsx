@@ -9,8 +9,7 @@ type DatabaseListing = Omit<Listing, "updated_at"> & { updated_at: Date | string
 async function loadListings(): Promise<Listing[]> {
   const sql = database();
   const rows = await sql<DatabaseListing[]>`
-    SELECT id, domain, url, description, bid, clicks,
-      free_bids_remaining, bid_limit, updated_at
+    SELECT id, domain, url, description, bid, clicks, updated_at
     FROM listings
     WHERE bid > 0
     ORDER BY bid DESC, updated_at ASC
