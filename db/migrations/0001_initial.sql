@@ -44,6 +44,13 @@ CREATE TABLE IF NOT EXISTS processed_payments (
   processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS listing_clicks (
+  domain TEXT NOT NULL,
+  visitor_hash TEXT NOT NULL,
+  clicked_on DATE NOT NULL DEFAULT CURRENT_DATE,
+  PRIMARY KEY (domain, visitor_hash, clicked_on)
+);
+
 UPDATE listings SET listing_kind = 'paid'
 WHERE listing_kind <> 'example'
   AND EXISTS (SELECT 1 FROM processed_payments p WHERE p.domain = listings.domain);

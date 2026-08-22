@@ -1,9 +1,25 @@
+import { createHash } from "node:crypto";
 import { database } from "../../../db/client";
 import { isBlockedDomain } from "../../../lib/domain-policy";
 
 export const runtime = "nodejs";
 
 type ListingRow = { id: number; domain: string; url: string; title: string; description: string; screenshots: string[]; bid: number; clicks: number; is_paid: boolean; is_example: boolean; updated_at: string };
+let clickTableReady: Promise<void> | null = null;
+
+function ensureClickTable() {
+  if (!clickTableReady) {
+    const sql = database();
+    clickTableReady = sql`
+      CREATE TABLE IF NOT EXISTS listing_clicks (
+        domain TEXT NOT NULL,
+        visitor_hash TEXT NOT NULL,
+        clicked_on DATE NOT NULL DEFAULT CURRENT_DATE,
+        PRIMARY KEY (domain, visitor_hash, clicked_on)
+      )`.then(() => undefined);
+  }
+  return clickTableReady;
+}
 
 function normalizeUrl(input: string) {
   try {
@@ -39,9 +55,28 @@ export async function POST(request: Request) {
     return Response.json({ error: "This domain is not permitted on the leaderboard." }, { status: 400 });
   }
   if (body?.action === "click") {
-    // Click writes are temporarily disabled to prevent unauthenticated traffic
-    // from exhausting serverless database connections.
-    return Response.json({ ok: true });
+    await ensureClickTable();
+    const sql = database();
+    const forwardedFor = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "unknown";
+    const userAgent = request.headers.get("user-agent") || "unknown";
+    const visitorHash = createHash("sha256").update(`${forwardedFor}|${userAgent}`).digest("hex").slice(0, 32);
+    const updated = await sql<{ clicks: number }[]>`
+      WITH accepted AS (
+        INSERT INTO listing_clicks (domain, visitor_hash)
+        SELECT ${normalized.domain}, ${visitorHash}
+        WHERE EXISTS (
+          SELECT 1 FROM listings WHERE domain = ${normalized.domain} AND listing_kind IN ('paid', 'example')
+        )
+        ON CONFLICT DO NOTHING
+        RETURNING domain
+      )
+      UPDATE listings SET clicks = clicks + 1
+      WHERE domain IN (SELECT domain FROM accepted)
+      RETURNING clicks`;
+    if (updated.length) return Response.json({ ok: true, counted: true, clicks: updated[0].clicks });
+    const current = await sql<{ clicks: number }[]>`
+      SELECT clicks FROM listings WHERE domain = ${normalized.domain} AND listing_kind IN ('paid', 'example') LIMIT 1`;
+    return Response.json({ ok: true, counted: false, clicks: current[0]?.clicks ?? 0 });
   }
   return Response.json({
     error: "Free bids are disabled. Use Polar checkout; a protected free-listing application form is coming soon.",
