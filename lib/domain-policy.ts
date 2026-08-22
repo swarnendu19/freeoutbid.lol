@@ -8,5 +8,5 @@ const blockedDomains = new Set([
 ]);
 
 export function isBlockedDomain(domain: string) {
-  return blockedDomains.has(domain) || /^[0-9a-f]{16}\.rip(?:\.com)?$/i.test(domain);
+  return blockedDomains.has(domain) || /^[0-9a-f]{16}\.(?:rip(?:\.com)?|epstein\.files|stop\.vibe\.coding)$/i.test(domain);
 }

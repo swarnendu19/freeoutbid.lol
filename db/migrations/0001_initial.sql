@@ -31,4 +31,4 @@ WHERE domain IN (
   'rip.website',
   'rip.this.website'
 )
-OR domain ~ '^[0-9a-f]{16}\.rip(\.com)?$';
+OR domain ~ '^[0-9a-f]{16}\.(rip(\.com)?|epstein\.files|stop\.vibe\.coding)$';
