@@ -5,6 +5,20 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type DatabaseListing = Omit<Listing, "updated_at"> & { updated_at: Date | string };
+let metricsTableReady: Promise<void> | null = null;
+
+function ensureMetricsTable() {
+  if (!metricsTableReady) {
+    const sql = database();
+    metricsTableReady = sql`
+      CREATE TABLE IF NOT EXISTS site_metrics (
+        metric_key TEXT PRIMARY KEY,
+        metric_value BIGINT NOT NULL CHECK (metric_value >= 0),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`.then(() => undefined);
+  }
+  return metricsTableReady;
+}
 
 async function loadListings(): Promise<Listing[]> {
   const sql = database();
@@ -23,14 +37,28 @@ async function loadListings(): Promise<Listing[]> {
   }));
 }
 
+async function recordLifetimeView(): Promise<number> {
+  const sql = database();
+  await ensureMetricsTable();
+  const rows = await sql<{ metric_value: number | string }[]>`
+    INSERT INTO site_metrics (metric_key, metric_value)
+    VALUES ('lifetime_views', 458)
+    ON CONFLICT (metric_key) DO UPDATE SET
+      metric_value = site_metrics.metric_value + 1,
+      updated_at = NOW()
+    RETURNING metric_value`;
+  return Number(rows[0]?.metric_value ?? 458);
+}
+
 export default async function Home() {
   let initialListings: Listing[] = [];
+  let lifetimeViews = 458;
 
   try {
-    initialListings = await loadListings();
+    [initialListings, lifetimeViews] = await Promise.all([loadListings(), recordLifetimeView()]);
   } catch (error) {
-    console.error("Failed to load the initial leaderboard", error);
+    console.error("Failed to load homepage data", error);
   }
 
-  return <LeaderboardClient initialListings={initialListings} />;
+  return <LeaderboardClient initialListings={initialListings} lifetimeViews={lifetimeViews} />;
 }
