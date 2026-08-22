@@ -1,6 +1,15 @@
 import { isBlockedDomain } from "../../../lib/domain-policy";
 
-type CheckoutRequest = { domain?: unknown; amount?: unknown };
+type CheckoutRequest = { domain?: unknown; amount?: unknown; title?: unknown; description?: unknown; screenshots?: unknown };
+
+function screenshotUrls(input: unknown) {
+  if (!Array.isArray(input)) return [];
+  return input.slice(0, 6).flatMap((value) => {
+    if (typeof value !== "string" || value.length > 500) return [];
+    try { const url = new URL(value); return url.protocol === "https:" ? [url.toString()] : []; }
+    catch { return []; }
+  });
+}
 
 export const runtime = "nodejs";
 
@@ -14,7 +23,11 @@ export async function POST(request: Request) {
   try { body = await request.json() as CheckoutRequest; } catch { return Response.json({ error: "Invalid checkout request." }, { status: 400 }); }
   const domain = typeof body.domain === "string" ? body.domain.trim().toLowerCase() : "";
   const amount = typeof body.amount === "number" ? body.amount : Number(body.amount);
+  const title = typeof body.title === "string" ? body.title.trim().slice(0, 100) : "";
+  const description = typeof body.description === "string" ? body.description.trim().slice(0, 320) : "";
+  const screenshots = screenshotUrls(body.screenshots);
   if (!domain || !domain.includes(".") || !Number.isFinite(amount) || amount < 1 || amount > 10000) return Response.json({ error: "Provide a valid domain and bid between $1 and $10,000." }, { status: 400 });
+  if (!title || !description) return Response.json({ error: "Provide a listing title and short description." }, { status: 400 });
   if (isBlockedDomain(domain)) return Response.json({ error: "This domain is not permitted on the leaderboard." }, { status: 400 });
 
   const polarResponse = await fetch(`${apiBase}/v1/checkouts/`, {
@@ -23,7 +36,7 @@ export async function POST(request: Request) {
     body: JSON.stringify({
       products: [productId],
       prices: { [productId]: [{ amount_type: "fixed", price_amount: Math.round(amount * 100), price_currency: "usd" }] },
-      metadata: { domain, bid_amount_usd: amount.toString(), source: "freeoutbid.lol" },
+      metadata: { domain, bid_amount_usd: amount.toString(), title, description, screenshots_json: JSON.stringify(screenshots), source: "freeoutbid.lol" },
       success_url: `${siteUrl}/?payment=success&checkout_id={CHECKOUT_ID}`,
       return_url: siteUrl,
     }),

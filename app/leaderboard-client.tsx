@@ -4,7 +4,7 @@
 
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from "react";
 
-export type Listing = { id: number | string; domain: string; url: string; description: string; bid: number; clicks: number; is_paid: boolean; updated_at?: string };
+export type Listing = { id: number | string; domain: string; url: string; title: string; description: string; screenshots: string[]; bid: number; clicks: number; is_paid: boolean; is_example: boolean; updated_at?: string };
 type Profile = Pick<Listing, "domain" | "url" | "bid" | "is_paid">;
 
 function normalizeUrl(input: string) {
@@ -34,6 +34,9 @@ function ListingIcon({ listing }: { listing: Listing }) {
 export default function LeaderboardClient({ initialListings }: { initialListings: Listing[] }) {
   const [amount, setAmount] = useState(1);
   const [domainInput, setDomainInput] = useState("");
+  const [titleInput, setTitleInput] = useState("");
+  const [descriptionInput, setDescriptionInput] = useState("");
+  const [screenshotsInput, setScreenshotsInput] = useState("");
   const [profile, setProfile] = useState<Profile>({ domain: "", url: "", bid: 0, is_paid: false });
   const [listings, setListings] = useState<Listing[]>(initialListings);
   const [boardLoading, setBoardLoading] = useState(false);
@@ -82,6 +85,8 @@ export default function LeaderboardClient({ initialListings }: { initialListings
     event.preventDefault();
     const normalized = normalizeUrl(domainInput);
     if (!normalized) { setMessage("Enter a valid domain or product URL."); setMessageTone("error"); return; }
+    if (!titleInput.trim()) { setMessage("Add a title for your listing."); setMessageTone("error"); return; }
+    if (!descriptionInput.trim()) { setMessage("Add a short description for your listing."); setMessageTone("error"); return; }
     setPending(normalized); setCheckoutError("");
   }
 
@@ -89,7 +94,8 @@ export default function LeaderboardClient({ initialListings }: { initialListings
     if (!pending) return;
     setLoading(true); setCheckoutError("");
     try {
-      const response = await fetch("/api/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ domain: pending.domain, url: pending.url, amount }) });
+      const screenshots = screenshotsInput.split(/[\n,]/).map((value) => value.trim()).filter(Boolean).slice(0, 6);
+      const response = await fetch("/api/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ domain: pending.domain, url: pending.url, amount, title: titleInput.trim(), description: descriptionInput.trim(), screenshots }) });
       const data = await response.json() as { url?: string; error?: string };
       if (!response.ok || !data.url) throw new Error(data.error || "Polar checkout is not configured yet.");
       window.location.href = data.url;
@@ -112,32 +118,33 @@ export default function LeaderboardClient({ initialListings }: { initialListings
   function renderListing(listing: Listing, index: number) {
     const isTopPaid = listing.is_paid && index === 0;
     const nextBid = listing.is_paid ? listing.bid + 1 : 1;
-    return <article className={`leader-row ${isTopPaid ? "top" : ""} ${listing.is_paid ? "paid-row" : "free-row"} ${listing.domain === profile.domain ? "owned" : ""}`} key={listing.domain} role="link" tabIndex={0} onClick={() => openListing(listing)} onKeyDown={(event) => cardKey(event, listing)} aria-label={`Visit ${listing.domain}`}>
-      {isTopPaid && <span className="top-crown">♛ PAID #1</span>}
+    return <article className={`leader-row ${isTopPaid ? "top" : ""} ${listing.is_example ? "featured-example" : ""} ${listing.is_paid ? "paid-row" : "free-row"} ${listing.domain === profile.domain ? "owned" : ""}`} key={listing.domain} role="link" tabIndex={0} onClick={() => openListing(listing)} onKeyDown={(event) => cardKey(event, listing)} aria-label={`Visit ${listing.domain}`}>
+      {isTopPaid && <span className="top-crown">✦ {listing.is_example ? "FEATURED EXAMPLE" : "PAID #1"}</span>}
       <span className="rank">#{index + 1}</span>
       <ListingIcon listing={listing} />
-      <div className="listing-copy"><h3>{listing.domain}{!listing.is_paid && <em className="free-tag">FREE LISTING</em>}{listing.domain === profile.domain && <em>ACTIVE URL</em>}</h3><p>{listing.description}</p><time>{listing.updated_at ? "recently updated" : "live listing"}</time></div>
+      <div className="listing-copy"><h3>{listing.title || listing.domain}{listing.is_example && <em className="featured-tag">FEATURED</em>}{!listing.is_paid && <em className="free-tag">FREE LISTING</em>}{listing.domain === profile.domain && <em>ACTIVE URL</em>}</h3><p>{listing.description}</p><time>{listing.domain} · {listing.updated_at ? "recently updated" : "live listing"}</time></div>
       <dl><div><dt>BID</dt><dd>${listing.bid}</dd></div><div><dt>CLICKS</dt><dd>{listing.clicks.toLocaleString()}</dd></div></dl>
       <button className="row-action" onClick={(event) => { event.stopPropagation(); startOutbid(listing); }}>{listing.is_paid ? `Outbid with $${nextBid}` : "Bid $1 to go paid"} <span>↑</span></button>
+      {(listing.screenshots ?? []).length > 0 && <div className="screenshot-strip" onClick={(event) => event.stopPropagation()}>{listing.screenshots.map((screenshot, shotIndex) => <img src={screenshot} alt={`${listing.title || listing.domain} screenshot ${shotIndex + 1}`} loading="lazy" key={`${screenshot}-${shotIndex}`} />)}</div>}
     </article>;
   }
 
   return <main>
     <header className="nav shell"><a className="brand" href="#top" aria-label="freeoutbid.lol home"><span className="logo-mark" aria-hidden="true"><i /><i /><i /></span><span>freeoutbid<em>.lol</em></span></a><nav aria-label="Primary navigation"><a href="#leaderboard">Leaderboard</a><a href="#rules">Rules</a></nav></header>
     <section className="hero shell" id="top">
-      <div className="status-pill"><span /> Paid listings only <b>·</b> real payments via Polar</div>
-      <h1>The leaderboard<br /><strong>money can’t fully buy.</strong></h1>
-      <p>Every public bid is paid with real money. Outbid the listing above you, climb the board, and get the clicks that come with the top spot.</p>
+      <div className="status-pill"><span /> The paid spotlight for indie apps <b>·</b> community listings below</div>
+      <h1>Put your app where<br /><strong>people look first.</strong></h1>
+      <p>Paid projects lead the board with richer cards, real screenshots, and their own story. Even a $1 paid bid ranks above every free community listing.</p>
       <div className="bid-line"><span>Claim #{rank} for</span><div className="amount-control"><button type="button" onClick={() => changeAmount(amount - 1)} aria-label="Decrease bid">−</button><b>$</b><input aria-label="Bid amount in dollars" type="number" min="1" max="10000" value={amount} onChange={(event) => changeAmount(Number(event.target.value))} /><button type="button" onClick={() => changeAmount(amount + 1)} aria-label="Increase bid">+</button></div></div>
       <p className="amount-help">Polar will charge exactly ${amount} after you confirm the checkout.</p>
-      <form className="claim-form" onSubmit={prepareBid} noValidate><label className={messageTone === "error" && !normalizeUrl(domainInput) ? "input-error" : ""}><span>◎</span><input value={domainInput} onChange={(event) => changeDomainInput(event.target.value)} placeholder="Your product URL" aria-label="Product URL" /></label><button className="claim-button">Claim your spot <span>↗</span></button></form>
+      <form className="claim-form listing-form" onSubmit={prepareBid} noValidate><div className="listing-fields"><label className={messageTone === "error" && !normalizeUrl(domainInput) ? "input-error" : ""}><span>◎</span><input value={domainInput} onChange={(event) => changeDomainInput(event.target.value)} placeholder="Your product URL" aria-label="Product URL" /></label><label><span>✦</span><input value={titleInput} onChange={(event) => setTitleInput(event.target.value.slice(0, 100))} placeholder="Listing title" aria-label="Listing title" /></label><label className="wide-field"><span>≡</span><textarea value={descriptionInput} onChange={(event) => setDescriptionInput(event.target.value.slice(0, 320))} placeholder="Short description" aria-label="Listing description" /></label><label className="wide-field"><span>▧</span><input value={screenshotsInput} onChange={(event) => setScreenshotsInput(event.target.value)} placeholder="Screenshot URLs, separated by commas (optional)" aria-label="Screenshot URLs" /></label></div><button className="claim-button">Continue to paid checkout <span>↗</span></button></form>
       <p className={`form-message ${messageTone}`}>{message || "Enter a URL and bid amount to continue to secure Polar checkout."}</p>
       <div className="credit-strip" aria-label="Listing options"><span><b>Paid bids only</b></span><i /><span>Secure checkout <b>Polar</b></span><i /><span>{profile.bid ? <>Current bid <b>${profile.bid}</b></> : <b>New URL</b>}</span></div>
-      <div className="free-listing"><span>Want a manually reviewed free listing?</span><a href="https://x.com/SwarnCode" target="_blank" rel="noopener noreferrer">DM @SwarnCode on X <b>↗</b></a><small>Send your URL by DM. It will not be published automatically.</small></div>
+      <div className="free-listing"><span>Want a free community listing?</span><b>Moderated application form coming soon — nothing is auto-published.</b></div>
     </section>
     <section className="leaderboard shell" id="leaderboard"><div className="board-head"><div><small>THE PUBLIC BOARD</small><h2>Paid bidders rank first.</h2></div><button type="button" onClick={() => void refresh(profile.url)}>↻ Refresh</button></div><p className="disclosure">Any paid bid ranks above every free listing. Click a card to visit its site.</p>{boardLoading ? <div className="board-state">Loading the live leaderboard…</div> : listings.length === 0 ? <div className="board-state"><strong>No bidders yet.</strong><span>Enter your URL above and become the first.</span></div> : <><div className="board-group"><div className="group-heading"><span>PAID BIDDERS</span><b>{paidListings.length}</b></div><div className="rows">{paidListings.length ? paidListings.map(renderListing) : <div className="board-state compact"><strong>No paid bidders yet.</strong><span>A $1 payment takes the first paid position.</span></div>}</div></div><div className="board-divider"><span>FREE LISTINGS</span></div><div className="board-group free-group"><p className="group-note">Manually approved after sending a DM to @SwarnCode. Free amounts do not outrank paid bids.</p><div className="rows">{freeListings.length ? freeListings.map(renderListing) : <div className="board-state compact"><strong>No free listings.</strong></div>}</div></div></>}</section>
-    <section className="rules shell" id="rules"><div><small>10-SECOND RULES</small><h2>No votes. No feed algorithm. Just the number.</h2></div><ol><li><b>01</b><span><strong>Enter a URL and amount.</strong>Even a $1 paid bid ranks above every free listing.</span></li><li><b>02</b><span><strong>Pay the exact bid.</strong>Every paid bid uses secure Polar checkout. There are no automatic free credits.</span></li><li><b>03</b><span><strong>Request a free listing manually.</strong>DM @SwarnCode on X with your URL. Approved projects appear in the separate free section.</span></li></ol></section>
+    <section className="rules shell" id="rules"><div><small>10-SECOND RULES</small><h2>No votes. No feed algorithm. Just the number.</h2></div><ol><li><b>01</b><span><strong>Tell your product’s story.</strong>Add its URL, title, description, and optional screenshot links.</span></li><li><b>02</b><span><strong>Pay the exact bid.</strong>Even a $1 paid bid ranks above every free listing through secure Polar checkout.</span></li><li><b>03</b><span><strong>Free listings stay moderated.</strong>A protected application form is coming soon. Requests will be reviewed before appearing in the community section.</span></li></ol></section>
     <footer className="footer shell"><a className="brand" href="#top"><span className="logo-mark" aria-hidden="true"><i /><i /><i /></span><span>freeoutbid<em>.lol</em></span></a><p>Paid bids and manually approved promotional listings.</p><span>Leaderboard · Rules</span></footer>
-    {pending && <div className="modal-backdrop" onMouseDown={() => setPending(null)}><section className="bid-modal" role="dialog" aria-modal="true" aria-labelledby="confirm-title" onMouseDown={(event) => event.stopPropagation()}><button className="modal-close" onClick={() => setPending(null)} aria-label="Close">×</button><small>CONFIRM PAID BID</small><h2 id="confirm-title">Put {pending.domain}<br />at paid rank #{rank}</h2><div className="modal-stats"><div><span>YOUR BID</span><strong>${amount}</strong></div><div><span>PAY NOW</span><strong>${amount}</strong></div><div><span>CHECKOUT</span><strong>Polar</strong></div></div><p>Continue to Polar, which charges exactly ${amount}. Any paid bid ranks above all free listings. For a manually reviewed free listing, DM @SwarnCode on X instead.</p><a className="x-dm-link" href="https://x.com/SwarnCode" target="_blank" rel="noopener noreferrer">DM @SwarnCode for a free listing ↗</a><button className="claim-button modal-primary" onClick={payWithPolar} disabled={loading}>{loading ? "Opening Polar…" : `Pay $${amount} with Polar`} <span>↗</span></button><small className="polar-note">Secure Polar checkout · no freeoutbid account created</small>{checkoutError && <p className="checkout-error" role="alert">{checkoutError}</p>}<button className="cancel-button" onClick={() => setPending(null)}>Cancel</button></section></div>}
+    {pending && <div className="modal-backdrop" onMouseDown={() => setPending(null)}><section className="bid-modal" role="dialog" aria-modal="true" aria-labelledby="confirm-title" onMouseDown={(event) => event.stopPropagation()}><button className="modal-close" onClick={() => setPending(null)} aria-label="Close">×</button><small>CONFIRM PAID BID</small><h2 id="confirm-title">Put {titleInput}<br />at paid rank #{rank}</h2><div className="modal-stats"><div><span>YOUR BID</span><strong>${amount}</strong></div><div><span>PAY NOW</span><strong>${amount}</strong></div><div><span>CHECKOUT</span><strong>Polar</strong></div></div><p>Continue to Polar, which charges exactly ${amount}. Your title, description, and screenshots will appear on the card after payment. Any paid bid ranks above all free listings.</p><button className="claim-button modal-primary" onClick={payWithPolar} disabled={loading}>{loading ? "Opening Polar…" : `Pay $${amount} with Polar`} <span>↗</span></button><small className="polar-note">Secure Polar checkout · no freeoutbid account created</small>{checkoutError && <p className="checkout-error" role="alert">{checkoutError}</p>}<button className="cancel-button" onClick={() => setPending(null)}>Cancel</button></section></div>}
   </main>;
 }

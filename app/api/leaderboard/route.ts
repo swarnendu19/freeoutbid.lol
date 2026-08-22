@@ -3,7 +3,7 @@ import { isBlockedDomain } from "../../../lib/domain-policy";
 
 export const runtime = "nodejs";
 
-type ListingRow = { id: number; domain: string; url: string; description: string; bid: number; clicks: number; is_paid: boolean; updated_at: string };
+type ListingRow = { id: number; domain: string; url: string; title: string; description: string; screenshots: string[]; bid: number; clicks: number; is_paid: boolean; is_example: boolean; updated_at: string };
 
 function normalizeUrl(input: string) {
   try {
@@ -19,12 +19,14 @@ export async function GET(request: Request) {
   const requested = new URL(request.url).searchParams.get("url");
   const normalized = requested ? normalizeUrl(requested) : null;
   const listings = await sql<ListingRow[]>`
-    SELECT l.id, l.domain, l.url, l.description, l.bid, l.clicks, l.updated_at,
-      EXISTS (SELECT 1 FROM processed_payments p WHERE p.domain = l.domain) AS is_paid
-    FROM listings l WHERE l.bid > 0 ORDER BY is_paid DESC, l.bid DESC, l.updated_at ASC LIMIT 100`;
+    SELECT l.id, l.domain, l.url, l.title, l.description, l.screenshots, l.bid, l.clicks, l.updated_at,
+      (l.listing_kind IN ('paid', 'example')) AS is_paid,
+      (l.listing_kind = 'example') AS is_example
+    FROM listings l WHERE l.bid > 0 ORDER BY is_example DESC, is_paid DESC, l.bid DESC, l.updated_at ASC LIMIT 100`;
   const matches = normalized ? await sql<ListingRow[]>`
-    SELECT l.id, l.domain, l.url, l.description, l.bid, l.clicks, l.updated_at,
-      EXISTS (SELECT 1 FROM processed_payments p WHERE p.domain = l.domain) AS is_paid
+    SELECT l.id, l.domain, l.url, l.title, l.description, l.screenshots, l.bid, l.clicks, l.updated_at,
+      (l.listing_kind IN ('paid', 'example')) AS is_paid,
+      (l.listing_kind = 'example') AS is_example
     FROM listings l WHERE l.domain = ${normalized.domain} LIMIT 1` : [];
   return Response.json({ listings, profile: matches[0] ?? { domain: normalized?.domain, url: normalized?.url, bid: 0, is_paid: false } });
 }
@@ -42,6 +44,6 @@ export async function POST(request: Request) {
     return Response.json({ ok: true });
   }
   return Response.json({
-    error: "Free bids are disabled. Use Polar checkout, or DM @SwarnCode on X to request a manually reviewed free listing.",
+    error: "Free bids are disabled. Use Polar checkout; a protected free-listing application form is coming soon.",
   }, { status: 402 });
 }

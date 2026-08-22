@@ -14,12 +14,39 @@ CREATE TABLE IF NOT EXISTS listings (
 CREATE INDEX IF NOT EXISTS idx_listings_bid_updated
 ON listings (bid DESC, updated_at ASC);
 
+ALTER TABLE listings ADD COLUMN IF NOT EXISTS title TEXT NOT NULL DEFAULT '';
+ALTER TABLE listings ADD COLUMN IF NOT EXISTS screenshots TEXT[] NOT NULL DEFAULT '{}';
+ALTER TABLE listings ADD COLUMN IF NOT EXISTS listing_kind TEXT NOT NULL DEFAULT 'free';
+
+INSERT INTO listings (domain, url, title, description, bid, listing_kind, screenshots)
+VALUES (
+  'contextkit.swarn.me',
+  'https://contextkit.swarn.me/',
+  'Contextkit — Stop re-explaining your project to AI',
+  'A workflow layer for Claude Code, Codex, and every AI coding agent: persistent context, guided planning, slop detection, and memorable short commands.',
+  1,
+  'example',
+  ARRAY['/contextkit/contextkit-hero.png','/contextkit/contextkit-flow.png','/contextkit/contextkit-slop.png','/contextkit/contextkit-skills.png','/contextkit/contextkit-commands.png','/contextkit/contextkit-price.png']
+)
+ON CONFLICT (domain) DO UPDATE SET
+  url = EXCLUDED.url,
+  title = EXCLUDED.title,
+  description = EXCLUDED.description,
+  bid = EXCLUDED.bid,
+  listing_kind = EXCLUDED.listing_kind,
+  screenshots = EXCLUDED.screenshots,
+  updated_at = NOW();
+
 CREATE TABLE IF NOT EXISTS processed_payments (
   order_id TEXT PRIMARY KEY,
   domain TEXT NOT NULL,
   amount INTEGER NOT NULL CHECK (amount > 0),
   processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+UPDATE listings SET listing_kind = 'paid'
+WHERE listing_kind <> 'example'
+  AND EXISTS (SELECT 1 FROM processed_payments p WHERE p.domain = listings.domain);
 
 -- Emergency cleanup for the pornography and randomized-domain spam flood.
 DELETE FROM listings

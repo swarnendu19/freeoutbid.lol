@@ -21,18 +21,18 @@ const bricolage = Bricolage_Grotesque({
 export const metadata: Metadata = {
   metadataBase: new URL('https://freeoutbid.lol'),
   icons: { icon: '/favicon.ico', shortcut: '/favicon.ico' },
-  title: 'freeoutbid.lol — The leaderboard money cannot fully buy',
-  description: 'Place a real paid bid, climb the public product leaderboard, and earn attention.',
+  title: 'freeoutbid.lol — Put your app where people look first',
+  description: 'Paid projects lead with rich cards, real screenshots, and their own story. Community listings stay in a separate reviewed section.',
   openGraph: {
-    title: 'freeoutbid.lol — The leaderboard money cannot fully buy',
-    description: 'Real paid bids. One public ladder. Climb with your product.',
+    title: 'freeoutbid.lol — Put your app where people look first',
+    description: 'Paid projects lead with richer cards. Even a $1 paid bid ranks above free community listings.',
     type: 'website',
     images: [{ url: '/og.png', width: 1731, height: 909, alt: 'freeoutbid.lol — The leaderboard money cannot fully buy' }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'freeoutbid.lol — The leaderboard money cannot fully buy',
-    description: 'Real paid bids. One public ladder. Climb with your product.',
+    title: 'freeoutbid.lol — Put your app where people look first',
+    description: 'Paid projects lead with richer cards. Even a $1 paid bid ranks above free community listings.',
     images: ['/og.png'],
   },
 };
