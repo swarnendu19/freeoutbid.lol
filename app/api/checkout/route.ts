@@ -6,7 +6,11 @@ function screenshotUrls(input: unknown) {
   if (!Array.isArray(input)) return [];
   return input.slice(0, 6).flatMap((value) => {
     if (typeof value !== "string" || value.length > 500) return [];
-    try { const url = new URL(value); return url.protocol === "https:" ? [url.toString()] : []; }
+    try {
+      const url = new URL(value);
+      const isVercelBlob = url.hostname.endsWith(".public.blob.vercel-storage.com");
+      return url.protocol === "https:" && isVercelBlob ? [url.toString()] : [];
+    }
     catch { return []; }
   });
 }

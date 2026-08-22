@@ -2,14 +2,16 @@
 
 /* eslint-disable @next/next/no-img-element -- arbitrary domain favicons cannot use a fixed Next image allowlist */
 
-import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from "react";
+import { upload } from "@vercel/blob/client";
+import { ChangeEvent, FormEvent, KeyboardEvent, useEffect, useMemo, useState } from "react";
 
 export type Listing = { id: number | string; domain: string; url: string; title: string; description: string; screenshots: string[]; bid: number; clicks: number; is_paid: boolean; is_example: boolean; updated_at?: string };
 type Profile = Pick<Listing, "domain" | "url" | "bid" | "is_paid">;
 
 function normalizeUrl(input: string) {
   try {
-    const parsed = new URL(/^https?:\/\//i.test(input.trim()) ? input.trim() : `https://${input.trim()}`);
+    if (!/^https:\/\//i.test(input.trim())) return null;
+    const parsed = new URL(input.trim());
     if (!parsed.hostname.includes(".")) return null;
     parsed.hash = "";
     return { domain: parsed.hostname.replace(/^www\./i, "").toLowerCase(), url: parsed.toString() };
@@ -36,7 +38,7 @@ export default function LeaderboardClient({ initialListings }: { initialListings
   const [domainInput, setDomainInput] = useState("");
   const [titleInput, setTitleInput] = useState("");
   const [descriptionInput, setDescriptionInput] = useState("");
-  const [screenshotsInput, setScreenshotsInput] = useState("");
+  const [screenshotFiles, setScreenshotFiles] = useState<File[]>([]);
   const [profile, setProfile] = useState<Profile>({ domain: "", url: "", bid: 0, is_paid: false });
   const [listings, setListings] = useState<Listing[]>(initialListings);
   const [boardLoading, setBoardLoading] = useState(false);
@@ -49,6 +51,9 @@ export default function LeaderboardClient({ initialListings }: { initialListings
   const paidListings = useMemo(() => listings.filter((row) => row.is_paid), [listings]);
   const freeListings = useMemo(() => listings.filter((row) => !row.is_paid), [listings]);
   const rank = useMemo(() => paidListings.filter((row) => row.bid >= amount && row.domain !== profile.domain).length + 1, [amount, paidListings, profile.domain]);
+  const screenshotPreviews = useMemo(() => screenshotFiles.map((file) => ({ file, url: URL.createObjectURL(file) })), [screenshotFiles]);
+
+  useEffect(() => () => screenshotPreviews.forEach(({ url }) => URL.revokeObjectURL(url)), [screenshotPreviews]);
 
   async function refresh(url?: string, syncAmount = false) {
     try {
@@ -84,17 +89,36 @@ export default function LeaderboardClient({ initialListings }: { initialListings
   function prepareBid(event: FormEvent) {
     event.preventDefault();
     const normalized = normalizeUrl(domainInput);
-    if (!normalized) { setMessage("Enter a valid domain or product URL."); setMessageTone("error"); return; }
-    if (!titleInput.trim()) { setMessage("Add a title for your listing."); setMessageTone("error"); return; }
-    if (!descriptionInput.trim()) { setMessage("Add a short description for your listing."); setMessageTone("error"); return; }
+    if (!normalized) { setMessage("Enter a complete HTTPS product URL."); setMessageTone("error"); return; }
     setPending(normalized); setCheckoutError("");
+  }
+
+  function chooseScreenshots(event: ChangeEvent<HTMLInputElement>) {
+    const selected = Array.from(event.target.files ?? []);
+    const validTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"]);
+    const valid = selected.filter((file) => validTypes.has(file.type) && file.size <= 8 * 1024 * 1024);
+    setScreenshotFiles((current) => [...current, ...valid].slice(0, 6));
+    if (valid.length !== selected.length) setCheckoutError("Use JPG, PNG, WebP, GIF, or AVIF images up to 8 MB each.");
+    else if (selected.length + screenshotFiles.length > 6) setCheckoutError("You can add up to 6 screenshots.");
+    else setCheckoutError("");
+    event.target.value = "";
+  }
+
+  function removeScreenshot(index: number) {
+    setScreenshotFiles((current) => current.filter((_, fileIndex) => fileIndex !== index));
   }
 
   async function payWithPolar() {
     if (!pending) return;
+    if (!titleInput.trim()) { setCheckoutError("Add a title for your listing."); return; }
+    if (!descriptionInput.trim()) { setCheckoutError("Add a short description for your listing."); return; }
     setLoading(true); setCheckoutError("");
     try {
-      const screenshots = screenshotsInput.split(/[\n,]/).map((value) => value.trim()).filter(Boolean).slice(0, 6);
+      const screenshots = await Promise.all(screenshotFiles.map(async (file) => {
+        const safeName = file.name.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").slice(-80);
+        const blob = await upload(`listing-assets/${pending.domain}/${crypto.randomUUID()}-${safeName}`, file, { access: "public", handleUploadUrl: "/api/uploads" });
+        return blob.url;
+      }));
       const response = await fetch("/api/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ domain: pending.domain, url: pending.url, amount, title: titleInput.trim(), description: descriptionInput.trim(), screenshots }) });
       const data = await response.json() as { url?: string; error?: string };
       if (!response.ok || !data.url) throw new Error(data.error || "Polar checkout is not configured yet.");
@@ -125,7 +149,7 @@ export default function LeaderboardClient({ initialListings }: { initialListings
       <div className="listing-copy"><h3>{listing.title || listing.domain}{listing.is_example && <em className="featured-tag">FEATURED</em>}{!listing.is_paid && <em className="free-tag">FREE LISTING</em>}{listing.domain === profile.domain && <em>ACTIVE URL</em>}</h3><p>{listing.description}</p><time>{listing.domain} · {listing.updated_at ? "recently updated" : "live listing"}</time></div>
       <dl><div><dt>BID</dt><dd>${listing.bid}</dd></div><div><dt>CLICKS</dt><dd>{listing.clicks.toLocaleString()}</dd></div></dl>
       <button className="row-action" onClick={(event) => { event.stopPropagation(); startOutbid(listing); }}>{listing.is_paid ? `Outbid with $${nextBid}` : "Bid $1 to go paid"} <span>↑</span></button>
-      {(listing.screenshots ?? []).length > 0 && <div className="screenshot-strip" onClick={(event) => event.stopPropagation()}>{listing.screenshots.map((screenshot, shotIndex) => <img src={screenshot} alt={`${listing.title || listing.domain} screenshot ${shotIndex + 1}`} loading="lazy" key={`${screenshot}-${shotIndex}`} />)}</div>}
+      {(listing.screenshots ?? []).length > 0 && <div className="screenshot-gallery" onClick={(event) => event.stopPropagation()}>{listing.screenshots.map((screenshot, shotIndex) => <figure key={`${screenshot}-${shotIndex}`}><img src={screenshot} alt={`${listing.title || listing.domain} screenshot ${shotIndex + 1}`} loading="lazy" /></figure>)}</div>}
     </article>;
   }
 
@@ -135,16 +159,14 @@ export default function LeaderboardClient({ initialListings }: { initialListings
       <div className="status-pill"><span /> The paid spotlight for indie apps <b>·</b> community listings below</div>
       <h1>Put your app where<br /><strong>people look first.</strong></h1>
       <p>Paid projects lead the board with richer cards, real screenshots, and their own story. Even a $1 paid bid ranks above every free community listing.</p>
-      <div className="bid-line"><span>Claim #{rank} for</span><div className="amount-control"><button type="button" onClick={() => changeAmount(amount - 1)} aria-label="Decrease bid">−</button><b>$</b><input aria-label="Bid amount in dollars" type="number" min="1" max="10000" value={amount} onChange={(event) => changeAmount(Number(event.target.value))} /><button type="button" onClick={() => changeAmount(amount + 1)} aria-label="Increase bid">+</button></div></div>
-      <p className="amount-help">Polar will charge exactly ${amount} after you confirm the checkout.</p>
-      <form className="claim-form listing-form" onSubmit={prepareBid} noValidate><div className="listing-fields"><label className={messageTone === "error" && !normalizeUrl(domainInput) ? "input-error" : ""}><span>◎</span><input value={domainInput} onChange={(event) => changeDomainInput(event.target.value)} placeholder="Your product URL" aria-label="Product URL" /></label><label><span>✦</span><input value={titleInput} onChange={(event) => setTitleInput(event.target.value.slice(0, 100))} placeholder="Listing title" aria-label="Listing title" /></label><label className="wide-field"><span>≡</span><textarea value={descriptionInput} onChange={(event) => setDescriptionInput(event.target.value.slice(0, 320))} placeholder="Short description" aria-label="Listing description" /></label><label className="wide-field"><span>▧</span><input value={screenshotsInput} onChange={(event) => setScreenshotsInput(event.target.value)} placeholder="Screenshot URLs, separated by commas (optional)" aria-label="Screenshot URLs" /></label></div><button className="claim-button">Continue to paid checkout <span>↗</span></button></form>
-      <p className={`form-message ${messageTone}`}>{message || "Enter a URL and bid amount to continue to secure Polar checkout."}</p>
+      <form className="claim-form url-only-form" onSubmit={prepareBid} noValidate><label className={messageTone === "error" && !normalizeUrl(domainInput) ? "input-error" : ""}><span>◎</span><input value={domainInput} onChange={(event) => changeDomainInput(event.target.value)} placeholder="https://yourapp.com" aria-label="HTTPS product URL" inputMode="url" autoCapitalize="none" /></label><button className="claim-button">Create your ad <span>↗</span></button></form>
+      <p className={`form-message ${messageTone}`}>{message || "Start with your HTTPS URL. Add every other detail in the next step."}</p>
       <div className="credit-strip" aria-label="Listing options"><span><b>Paid bids only</b></span><i /><span>Secure checkout <b>Polar</b></span><i /><span>{profile.bid ? <>Current bid <b>${profile.bid}</b></> : <b>New URL</b>}</span></div>
       <div className="free-listing"><span>Want a free community listing?</span><b>Moderated application form coming soon — nothing is auto-published.</b></div>
     </section>
     <section className="leaderboard shell" id="leaderboard"><div className="board-head"><div><small>THE PUBLIC BOARD</small><h2>Paid bidders rank first.</h2></div><button type="button" onClick={() => void refresh(profile.url)}>↻ Refresh</button></div><p className="disclosure">Any paid bid ranks above every free listing. Click a card to visit its site.</p>{boardLoading ? <div className="board-state">Loading the live leaderboard…</div> : listings.length === 0 ? <div className="board-state"><strong>No bidders yet.</strong><span>Enter your URL above and become the first.</span></div> : <><div className="board-group"><div className="group-heading"><span>PAID BIDDERS</span><b>{paidListings.length}</b></div><div className="rows">{paidListings.length ? paidListings.map(renderListing) : <div className="board-state compact"><strong>No paid bidders yet.</strong><span>A $1 payment takes the first paid position.</span></div>}</div></div><div className="board-divider"><span>FREE LISTINGS</span></div><div className="board-group free-group"><p className="group-note">Community submissions are manually approved. Free amounts do not outrank paid bids.</p><div className="rows">{freeListings.length ? freeListings.map(renderListing) : <div className="board-state compact"><strong>No free listings.</strong></div>}</div></div></>}</section>
-    <section className="rules shell" id="rules"><div><small>10-SECOND RULES</small><h2>No votes. No feed algorithm. Just the number.</h2></div><ol><li><b>01</b><span><strong>Tell your product’s story.</strong>Add its URL, title, description, and optional screenshot links.</span></li><li><b>02</b><span><strong>Pay the exact bid.</strong>Even a $1 paid bid ranks above every free listing through secure Polar checkout.</span></li><li><b>03</b><span><strong>Free listings stay moderated.</strong>A protected application form is coming soon. Requests will be reviewed before appearing in the community section.</span></li></ol></section>
+    <section className="rules shell" id="rules"><div><small>10-SECOND RULES</small><h2>No votes. No feed algorithm. Just the number.</h2></div><ol><li><b>01</b><span><strong>Build an infographic ad.</strong>Add a title, story, and up to six screenshots in any aspect ratio.</span></li><li><b>02</b><span><strong>Pay the exact bid.</strong>Even a $1 paid bid ranks above every free listing through secure Polar checkout.</span></li><li><b>03</b><span><strong>Free listings stay moderated.</strong>A protected application form is coming soon. Requests will be reviewed before appearing in the community section.</span></li></ol></section>
     <footer className="footer shell"><a className="brand" href="#top"><span className="logo-mark" aria-hidden="true"><i /><i /><i /></span><span>freeoutbid<em>.lol</em></span></a><p>Paid bids and manually approved promotional listings.</p><span>Leaderboard · Rules</span></footer>
-    {pending && <div className="modal-backdrop" onMouseDown={() => setPending(null)}><section className="bid-modal" role="dialog" aria-modal="true" aria-labelledby="confirm-title" onMouseDown={(event) => event.stopPropagation()}><button className="modal-close" onClick={() => setPending(null)} aria-label="Close">×</button><small>CONFIRM PAID BID</small><h2 id="confirm-title">Put {titleInput}<br />at paid rank #{rank}</h2><div className="modal-stats"><div><span>YOUR BID</span><strong>${amount}</strong></div><div><span>PAY NOW</span><strong>${amount}</strong></div><div><span>CHECKOUT</span><strong>Polar</strong></div></div><p>Continue to Polar, which charges exactly ${amount}. Your title, description, and screenshots will appear on the card after payment. Any paid bid ranks above all free listings.</p><button className="claim-button modal-primary" onClick={payWithPolar} disabled={loading}>{loading ? "Opening Polar…" : `Pay $${amount} with Polar`} <span>↗</span></button><small className="polar-note">Secure Polar checkout · no freeoutbid account created</small>{checkoutError && <p className="checkout-error" role="alert">{checkoutError}</p>}<button className="cancel-button" onClick={() => setPending(null)}>Cancel</button></section></div>}
+    {pending && <div className="modal-backdrop" onMouseDown={() => !loading && setPending(null)}><section className="bid-modal listing-modal" role="dialog" aria-modal="true" aria-labelledby="confirm-title" onMouseDown={(event) => event.stopPropagation()}><button className="modal-close" onClick={() => setPending(null)} aria-label="Close" disabled={loading}>×</button><small>BUILD YOUR PAID AD</small><h2 id="confirm-title">Turn {pending.domain}<br />into a featured story.</h2><div className="modal-form"><label><span>LISTING TITLE</span><input value={titleInput} onChange={(event) => setTitleInput(event.target.value.slice(0, 100))} placeholder="A clear, memorable product name" autoFocus /></label><label><span>SHORT DESCRIPTION</span><textarea value={descriptionInput} onChange={(event) => setDescriptionInput(event.target.value.slice(0, 320))} placeholder="What does it do, and why should people click?" /></label><div className="modal-bid"><div><span>YOUR BID</span><strong>Claim paid rank #{rank}</strong></div><div className="amount-control"><button type="button" onClick={() => changeAmount(amount - 1)} aria-label="Decrease bid">−</button><b>$</b><input aria-label="Bid amount in dollars" type="number" min="1" max="10000" value={amount} onChange={(event) => changeAmount(Number(event.target.value))} /><button type="button" onClick={() => changeAmount(amount + 1)} aria-label="Increase bid">+</button></div></div><div className="image-uploader"><div><span>SCREENSHOTS <b>{screenshotFiles.length}/6</b></span><p>Any shape works. JPG, PNG, WebP, GIF, or AVIF · 8 MB max each.</p></div><label className="upload-button"><input type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" multiple onChange={chooseScreenshots} disabled={screenshotFiles.length >= 6 || loading} /><span>＋ Add images</span></label></div>{screenshotPreviews.length > 0 && <div className="upload-previews">{screenshotPreviews.map(({ file, url }, index) => <figure key={`${file.name}-${file.lastModified}-${index}`}><img src={url} alt={`Selected screenshot ${index + 1}`} /><button type="button" onClick={() => removeScreenshot(index)} aria-label={`Remove ${file.name}`}>×</button></figure>)}</div>}</div><button className="claim-button modal-primary" onClick={payWithPolar} disabled={loading}>{loading ? (screenshotFiles.length ? "Uploading images…" : "Opening Polar…") : `Pay $${amount} with Polar`} <span>↗</span></button><small className="polar-note">Images upload securely to cloud storage before Polar checkout.</small>{checkoutError && <p className="checkout-error" role="alert">{checkoutError}</p>}<button className="cancel-button" onClick={() => setPending(null)} disabled={loading}>Cancel</button></section></div>}
   </main>;
 }
