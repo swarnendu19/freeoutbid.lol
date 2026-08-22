@@ -35,8 +35,8 @@ export async function POST(request: Request) {
     return Response.json({ error: "This domain is not permitted on the leaderboard." }, { status: 400 });
   }
   if (body?.action === "click") {
-    const sql = database();
-    await sql`UPDATE listings SET clicks = clicks + 1 WHERE domain = ${normalized.domain}`;
+    // Click writes are temporarily disabled to prevent unauthenticated traffic
+    // from exhausting serverless database connections.
     return Response.json({ ok: true });
   }
   return Response.json({

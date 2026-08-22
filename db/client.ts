@@ -7,7 +7,7 @@ export function database() {
   if (!url) throw new Error("DATABASE_URL is not configured.");
   if (!globalDatabase.freeoutbidSql) {
     globalDatabase.freeoutbidSql = postgres(url, {
-      max: process.env.NODE_ENV === "production" ? 10 : 3,
+      max: 1,
       idle_timeout: 20,
       connect_timeout: 10,
       prepare: false,
