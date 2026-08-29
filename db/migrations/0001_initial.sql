@@ -32,16 +32,6 @@ CREATE TABLE IF NOT EXISTS listing_clicks (
   PRIMARY KEY (domain, visitor_hash, clicked_on)
 );
 
-CREATE TABLE IF NOT EXISTS site_metrics (
-  metric_key TEXT PRIMARY KEY,
-  metric_value BIGINT NOT NULL CHECK (metric_value >= 0),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-INSERT INTO site_metrics (metric_key, metric_value)
-VALUES ('lifetime_views', 458)
-ON CONFLICT (metric_key) DO NOTHING;
-
 UPDATE listings SET listing_kind = 'paid'
 WHERE EXISTS (SELECT 1 FROM processed_payments p WHERE p.domain = listings.domain);
 

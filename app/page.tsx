@@ -5,20 +5,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type DatabaseListing = Omit<Listing, "updated_at"> & { updated_at: Date | string };
-let metricsTableReady: Promise<void> | null = null;
-
-function ensureMetricsTable() {
-  if (!metricsTableReady) {
-    const sql = database();
-    metricsTableReady = sql`
-      CREATE TABLE IF NOT EXISTS site_metrics (
-        metric_key TEXT PRIMARY KEY,
-        metric_value BIGINT NOT NULL CHECK (metric_value >= 0),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      )`.then(() => undefined);
-  }
-  return metricsTableReady;
-}
+type VemetricAnalyticsResponse = { data?: Array<{ metrics?: { pageviews?: number } }> };
 
 async function loadListings(): Promise<Listing[]> {
   const sql = database();
@@ -36,28 +23,39 @@ async function loadListings(): Promise<Listing[]> {
   }));
 }
 
-async function recordLifetimeView(): Promise<number> {
-  const sql = database();
-  await ensureMetricsTable();
-  const rows = await sql<{ metric_value: number | string }[]>`
-    INSERT INTO site_metrics (metric_key, metric_value)
-    VALUES ('lifetime_views', 458)
-    ON CONFLICT (metric_key) DO UPDATE SET
-      metric_value = site_metrics.metric_value + 1,
-      updated_at = NOW()
-    RETURNING metric_value`;
-  return Number(rows[0]?.metric_value ?? 458);
+async function loadVemetricViews(): Promise<number | null> {
+  const apiKey = process.env.VEMETRIC_API_KEY;
+  if (!apiKey) return null;
+
+  try {
+    const response = await fetch("https://api.vemetric.com/v1/analytics/query", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ dateRange: "1year", metrics: ["pageviews"], groupBy: [], limit: 1, offset: 0 }),
+      next: { revalidate: 300 },
+    });
+    if (!response.ok) {
+      console.error(`Vemetric analytics request failed with status ${response.status}`);
+      return null;
+    }
+    const result = await response.json() as VemetricAnalyticsResponse;
+    const pageviews = result.data?.[0]?.metrics?.pageviews;
+    return typeof pageviews === "number" && Number.isFinite(pageviews) ? Math.max(0, Math.round(pageviews)) : null;
+  } catch (error) {
+    console.error("Failed to load Vemetric page views", error);
+    return null;
+  }
 }
 
 export default async function Home() {
   let initialListings: Listing[] = [];
-  let lifetimeViews = 458;
+  let vemetricViews: number | null = null;
 
   try {
-    [initialListings, lifetimeViews] = await Promise.all([loadListings(), recordLifetimeView()]);
+    [initialListings, vemetricViews] = await Promise.all([loadListings(), loadVemetricViews()]);
   } catch (error) {
     console.error("Failed to load homepage data", error);
   }
 
-  return <LeaderboardClient initialListings={initialListings} lifetimeViews={lifetimeViews} />;
+  return <LeaderboardClient initialListings={initialListings} vemetricViews={vemetricViews} />;
 }

@@ -33,7 +33,7 @@ function ListingIcon({ listing }: { listing: Listing }) {
   </span>;
 }
 
-export default function LeaderboardClient({ initialListings, lifetimeViews }: { initialListings: Listing[]; lifetimeViews: number }) {
+export default function LeaderboardClient({ initialListings, vemetricViews }: { initialListings: Listing[]; vemetricViews: number | null }) {
   const [amount, setAmount] = useState(1);
   const [domainInput, setDomainInput] = useState("");
   const [titleInput, setTitleInput] = useState("");
@@ -157,7 +157,7 @@ export default function LeaderboardClient({ initialListings, lifetimeViews }: { 
   }
 
   return <main>
-    <header className="nav shell"><a className="brand" href="#top" aria-label="freeoutbid.lol home"><span className="logo-mark" aria-hidden="true"><i /><i /><i /></span><span>freeoutbid<em>.lol</em></span></a><div className="nav-actions"><span className="view-counter" aria-label={`${lifetimeViews.toLocaleString()} lifetime website views`}><i aria-hidden="true" />Views: <b>{lifetimeViews.toLocaleString()}</b></span><nav aria-label="Primary navigation"><a href="#leaderboard">Leaderboard</a><a href="#rules">Rules</a></nav></div></header>
+    <header className="nav shell"><a className="brand" href="#top" aria-label="freeoutbid.lol home"><span className="logo-mark" aria-hidden="true"><i /><i /><i /></span><span>freeoutbid<em>.lol</em></span></a><div className="nav-actions">{vemetricViews !== null && <span className="view-counter" aria-label={`${vemetricViews.toLocaleString()} Vemetric page views`}><i aria-hidden="true" />Views: <b>{vemetricViews.toLocaleString()}</b></span>}<nav aria-label="Primary navigation"><a href="#leaderboard">Leaderboard</a><a href="#rules">Rules</a></nav></div></header>
     <section className="hero shell" id="top">
       <div className="status-pill"><span /> Paid bids lead <b>·</b> free listings by DM</div>
       <h1>The leaderboard<br /><strong>money can’t fully buy.</strong></h1>
