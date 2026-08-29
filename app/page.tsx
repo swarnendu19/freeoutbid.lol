@@ -22,8 +22,6 @@ function ensureMetricsTable() {
 
 async function loadListings(): Promise<Listing[]> {
   const sql = database();
-  // One-time production cleanup for the retired hard-coded example listing.
-  await sql`DELETE FROM listings WHERE listing_kind = 'example' OR domain = 'contextkit.swarn.me'`;
   const rows = await sql<DatabaseListing[]>`
     SELECT l.id, l.domain, l.url, l.title, l.description, l.screenshots, l.bid, l.clicks, l.updated_at,
       (l.listing_kind = 'paid') AS is_paid

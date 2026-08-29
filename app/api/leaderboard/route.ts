@@ -32,8 +32,6 @@ function normalizeUrl(input: string) {
 
 export async function GET(request: Request) {
   const sql = database();
-  // One-time production cleanup for the retired hard-coded example listing.
-  await sql`DELETE FROM listings WHERE listing_kind = 'example' OR domain = 'contextkit.swarn.me'`;
   const requested = new URL(request.url).searchParams.get("url");
   const normalized = requested ? normalizeUrl(requested) : null;
   const listings = await sql<ListingRow[]>`
