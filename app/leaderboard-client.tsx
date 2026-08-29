@@ -5,7 +5,7 @@
 import { upload } from "@vercel/blob/client";
 import { ChangeEvent, FormEvent, KeyboardEvent, useEffect, useMemo, useState } from "react";
 
-export type Listing = { id: number | string; domain: string; url: string; title: string; description: string; screenshots: string[]; bid: number; clicks: number; is_paid: boolean; is_example: boolean; updated_at?: string };
+export type Listing = { id: number | string; domain: string; url: string; title: string; description: string; screenshots: string[]; bid: number; clicks: number; is_paid: boolean; updated_at?: string };
 type Profile = Pick<Listing, "domain" | "url" | "bid" | "is_paid">;
 
 function normalizeUrl(input: string) {
@@ -145,11 +145,11 @@ export default function LeaderboardClient({ initialListings, lifetimeViews }: { 
   function renderListing(listing: Listing, index: number) {
     const isTopPaid = listing.is_paid && index === 0;
     const nextBid = listing.is_paid ? listing.bid + 1 : 1;
-    return <article className={`leader-row ${isTopPaid ? "top" : ""} ${listing.is_example ? "featured-example" : ""} ${listing.is_paid ? "paid-row" : "free-row"} ${listing.domain === profile.domain ? "owned" : ""}`} key={listing.domain} role="link" tabIndex={0} onClick={() => openListing(listing)} onKeyDown={(event) => cardKey(event, listing)} aria-label={`Visit ${listing.domain}`}>
-      {isTopPaid && <span className="top-crown">✦ {listing.is_example ? "FEATURED EXAMPLE" : "PAID #1"}</span>}
+    return <article className={`leader-row ${isTopPaid ? "top" : ""} ${listing.is_paid ? "paid-row" : "free-row"} ${listing.domain === profile.domain ? "owned" : ""}`} key={listing.domain} role="link" tabIndex={0} onClick={() => openListing(listing)} onKeyDown={(event) => cardKey(event, listing)} aria-label={`Visit ${listing.domain}`}>
+      {isTopPaid && <span className="top-crown">✦ PAID #1</span>}
       <span className="rank">#{index + 1}</span>
       <ListingIcon listing={listing} />
-      <div className="listing-copy"><h3>{listing.title || listing.domain}{listing.is_example && <em className="featured-tag">FEATURED</em>}{!listing.is_paid && <em className="free-tag">FREE LISTING</em>}{listing.domain === profile.domain && <em>ACTIVE URL</em>}</h3><p>{listing.description}</p><time>{listing.domain} · {listing.updated_at ? "recently updated" : "live listing"}</time></div>
+      <div className="listing-copy"><h3>{listing.title || listing.domain}{!listing.is_paid && <em className="free-tag">FREE LISTING</em>}{listing.domain === profile.domain && <em>ACTIVE URL</em>}</h3><p>{listing.description}</p><time>{listing.domain} · {listing.updated_at ? "recently updated" : "live listing"}</time></div>
       <dl><div><dt>BID</dt><dd>${listing.bid}</dd></div><div><dt>CLICKS</dt><dd>{listing.clicks.toLocaleString()}</dd></div></dl>
       <button className="row-action" onClick={(event) => { event.stopPropagation(); startOutbid(listing); }}>{listing.is_paid ? `Outbid with $${nextBid}` : "Bid $1 to go paid"} <span>↑</span></button>
       {(listing.screenshots ?? []).length > 0 && <div className="screenshot-gallery" onClick={(event) => event.stopPropagation()} role="region" aria-label={`${listing.title || listing.domain} screenshot gallery`} tabIndex={0}>{listing.screenshots.map((screenshot, shotIndex) => <figure key={`${screenshot}-${shotIndex}`}><img src={screenshot} alt={`${listing.title || listing.domain} screenshot ${shotIndex + 1}`} loading="lazy" /></figure>)}</div>}

@@ -4,7 +4,7 @@ import { isBlockedDomain } from "../../../lib/domain-policy";
 
 export const runtime = "nodejs";
 
-type ListingRow = { id: number; domain: string; url: string; title: string; description: string; screenshots: string[]; bid: number; clicks: number; is_paid: boolean; is_example: boolean; updated_at: string };
+type ListingRow = { id: number; domain: string; url: string; title: string; description: string; screenshots: string[]; bid: number; clicks: number; is_paid: boolean; updated_at: string };
 let clickTableReady: Promise<void> | null = null;
 
 function ensureClickTable() {
@@ -32,17 +32,17 @@ function normalizeUrl(input: string) {
 
 export async function GET(request: Request) {
   const sql = database();
+  // One-time production cleanup for the retired hard-coded example listing.
+  await sql`DELETE FROM listings WHERE listing_kind = 'example' OR domain = 'contextkit.swarn.me'`;
   const requested = new URL(request.url).searchParams.get("url");
   const normalized = requested ? normalizeUrl(requested) : null;
   const listings = await sql<ListingRow[]>`
     SELECT l.id, l.domain, l.url, l.title, l.description, l.screenshots, l.bid, l.clicks, l.updated_at,
-      (l.listing_kind IN ('paid', 'example')) AS is_paid,
-      (l.listing_kind = 'example') AS is_example
-    FROM listings l WHERE l.bid > 0 ORDER BY is_example DESC, is_paid DESC, l.bid DESC, l.updated_at ASC LIMIT 100`;
+      (l.listing_kind = 'paid') AS is_paid
+    FROM listings l WHERE l.bid > 0 ORDER BY is_paid DESC, l.bid DESC, l.updated_at ASC LIMIT 100`;
   const matches = normalized ? await sql<ListingRow[]>`
     SELECT l.id, l.domain, l.url, l.title, l.description, l.screenshots, l.bid, l.clicks, l.updated_at,
-      (l.listing_kind IN ('paid', 'example')) AS is_paid,
-      (l.listing_kind = 'example') AS is_example
+      (l.listing_kind = 'paid') AS is_paid
     FROM listings l WHERE l.domain = ${normalized.domain} LIMIT 1` : [];
   return Response.json({ listings, profile: matches[0] ?? { domain: normalized?.domain, url: normalized?.url, bid: 0, is_paid: false } });
 }
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
         INSERT INTO listing_clicks (domain, visitor_hash)
         SELECT ${normalized.domain}, ${visitorHash}
         WHERE EXISTS (
-          SELECT 1 FROM listings WHERE domain = ${normalized.domain} AND listing_kind IN ('paid', 'example')
+          SELECT 1 FROM listings WHERE domain = ${normalized.domain} AND listing_kind = 'paid'
         )
         ON CONFLICT DO NOTHING
         RETURNING domain
@@ -75,7 +75,7 @@ export async function POST(request: Request) {
       RETURNING clicks`;
     if (updated.length) return Response.json({ ok: true, counted: true, clicks: updated[0].clicks });
     const current = await sql<{ clicks: number }[]>`
-      SELECT clicks FROM listings WHERE domain = ${normalized.domain} AND listing_kind IN ('paid', 'example') LIMIT 1`;
+      SELECT clicks FROM listings WHERE domain = ${normalized.domain} AND listing_kind = 'paid' LIMIT 1`;
     return Response.json({ ok: true, counted: false, clicks: current[0]?.clicks ?? 0 });
   }
   return Response.json({
