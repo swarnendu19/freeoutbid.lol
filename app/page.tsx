@@ -6,6 +6,7 @@ export const revalidate = 0;
 
 type DatabaseListing = Omit<Listing, "updated_at"> & { updated_at: Date | string };
 type VemetricAnalyticsResponse = { data?: Array<{ metrics?: { pageviews?: number } }> };
+type VemetricProjectResponse = { project?: { createdAt?: string; firstEventAt?: string | null } };
 
 async function loadListings(): Promise<Listing[]> {
   const sql = database();
@@ -28,10 +29,24 @@ async function loadVemetricViews(): Promise<number | null> {
   if (!apiKey) return null;
 
   try {
+    const projectResponse = await fetch("https://api.vemetric.com/v1/project", {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      next: { revalidate: 3600 },
+    });
+    if (!projectResponse.ok) {
+      console.error(`Vemetric project request failed with status ${projectResponse.status}`);
+      return null;
+    }
+    const project = await projectResponse.json() as VemetricProjectResponse;
+    const firstEventAt = project.project?.firstEventAt ?? project.project?.createdAt;
+    if (!firstEventAt) return 0;
+
+    const startDate = firstEventAt.slice(0, 10);
+    const endDate = new Date().toISOString().slice(0, 10);
     const response = await fetch("https://api.vemetric.com/v1/analytics/query", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ dateRange: "1year", metrics: ["pageviews"], groupBy: [], limit: 1, offset: 0 }),
+      body: JSON.stringify({ dateRange: [startDate, endDate], metrics: ["pageviews"], groupBy: [], limit: 1, offset: 0 }),
       next: { revalidate: 300 },
     });
     if (!response.ok) {
